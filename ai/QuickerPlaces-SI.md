@@ -1,6 +1,6 @@
 ---
 title: QuickerPlaces — System Instructions (SI)
-status: draft, pending template review
+status: implemented (v1) — see BUILD_SUMMARY.md
 last_updated: 2026-08-31
 ---
 
@@ -167,3 +167,7 @@ Per the user's standing coding preferences, apply throughout:
 ## 10. Suggested Next Step
 
 In the follow-up chat: attach this SI plus the template zip, and ask Claude to (a) inspect the template's structure/framework/conventions first, (b) resolve the open decisions in §7 against what it finds, and (c) implement the base app per §§4–6.
+
+---
+
+*Note: this document is preserved here as the original spec handoff. For what was actually built against it — including where the implementation deviated or made a judgment call — see [`BUILD_SUMMARY.md`](./BUILD_SUMMARY.md).*

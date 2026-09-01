@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -11,11 +12,63 @@ public partial class MainWindow : Window
 {
     private Point _bubbleDragStartPoint;
 
+    /// <summary>
+    /// The window's manual Height while the grid is showing — restored
+    /// from AppSettings.WindowHeight on startup, updated whenever the user
+    /// resizes the window, and reapplied whenever ApplyGridExpandedState
+    /// switches back from the auto-sized collapsed state. See
+    /// ApplyGridExpandedState for why this can't just be "whatever Height
+    /// currently is".
+    /// </summary>
+    private double _expandedHeight;
+
     public MainWindow(MainViewModel viewModel, AppSettings settings)
     {
         InitializeComponent();
         DataContext = viewModel;
+        viewModel.PropertyChanged += ViewModel_PropertyChanged;
         RestoreWindowState(settings);
+    }
+
+    private void ViewModel_PropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(MainViewModel.IsGridExpanded) && DataContext is MainViewModel viewModel)
+            ApplyGridExpandedState(viewModel.IsGridExpanded);
+    }
+
+    /// <summary>
+    /// Switches the window between two sizing modes as the grid is shown
+    /// or hidden (the Hide List/Show List button, now in the header):
+    /// hidden means SizeToContent="Height", so the window hugs just the
+    /// header and favourite bubbles instead of leaving blank space where
+    /// the grid used to be; shown means a fixed, manual height, so the
+    /// grid gets a sensible allowance of room. It can't be SizeToContent
+    /// in both states — WPF measures a Star-sized row as if it had
+    /// unlimited height once SizeToContent is driving the window's size,
+    /// so a Star grid row would make the window balloon to fit the entire
+    /// places list instead of leaving the DataGrid to scroll internally.
+    /// </summary>
+    private void ApplyGridExpandedState(bool isExpanded)
+    {
+        if (isExpanded)
+        {
+            MinHeight = 400;
+            SizeToContent = SizeToContent.Manual;
+            Height = System.Math.Max(_expandedHeight, MinHeight);
+        }
+        else
+        {
+            // Capture whatever height is currently in effect (the user may
+            // have resized the window since the last time this ran) before
+            // switching to auto-sizing, so Show List has something
+            // meaningful to restore rather than snapping back to a stale
+            // or default value.
+            if (SizeToContent == SizeToContent.Manual)
+                _expandedHeight = Height;
+
+            MinHeight = 0;
+            SizeToContent = SizeToContent.Height;
+        }
     }
 
     private void Window_Loaded(object sender, RoutedEventArgs e)
@@ -59,11 +112,17 @@ public partial class MainWindow : Window
 
         if (settings.WindowWidth > 0)
             Width = settings.WindowWidth;
-        if (settings.WindowHeight > 0)
-            Height = settings.WindowHeight;
+
+        // Height is handled separately from Width: it depends on whether
+        // the grid starts expanded or collapsed (see
+        // ApplyGridExpandedState), so remember the saved/default expanded
+        // height here and let that method decide what to actually apply.
+        _expandedHeight = settings.WindowHeight > 0 ? settings.WindowHeight : 650;
 
         if (settings.WindowMaximized)
             WindowState = WindowState.Maximized;
+
+        ApplyGridExpandedState(settings.IsGridExpanded);
     }
 
     /// <summary>
@@ -84,7 +143,17 @@ public partial class MainWindow : Window
             settings.WindowLeft = Left;
             settings.WindowTop = Top;
             settings.WindowWidth = Width;
-            settings.WindowHeight = Height;
+
+            // Height tracks whichever sizing mode is currently active (see
+            // ApplyGridExpandedState) — while the grid is hidden, the
+            // window's actual Height is just "however tall the header and
+            // favourites happen to be" today, not a meaningful size to
+            // restore into next time the grid is shown. Persist the
+            // remembered expanded height instead, capturing a live manual
+            // resize first if there's been one.
+            if (SizeToContent == SizeToContent.Manual)
+                _expandedHeight = Height;
+            settings.WindowHeight = _expandedHeight;
         }
 
         settings.WindowMaximized = WindowState == WindowState.Maximized;

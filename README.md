@@ -4,6 +4,8 @@ A lightweight Windows desktop utility for storing and quickly opening remembered
 
 > **Status:** early build. Functional end-to-end, two runtime bugs found via testing and fixed (see [`ai/BUILD_SUMMARY.md`](ai/BUILD_SUMMARY.md)), but not yet exercised through every feature in a full test pass. Expect rough edges.
 
+Using the app? See [`USER_MANUAL.md`](USER_MANUAL.md) for how to add, favourite, export, and import places.
+
 ## What it does
 
 - Save a folder path or a URL under a unique **alias**, with validation that blocks duplicate aliases and duplicate paths/URLs before they're saved.
@@ -39,6 +41,8 @@ Both are plain JSON and safe to inspect, back up, or hand-edit if you know what 
 
 ```
 .
+├── README.md
+├── USER_MANUAL.md           # how to use the app
 ├── src/                     # the actual application
 │   ├── QuickerPlaces.sln
 │   └── QuickerPlaces/       # WPF project (App, Models, ViewModels, Views, Services, ...)

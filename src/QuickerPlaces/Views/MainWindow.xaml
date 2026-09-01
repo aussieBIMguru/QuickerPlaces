@@ -4,10 +4,11 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:converters="clr-namespace:QuickerPlaces.Converters"
+        xmlns:models="clr-namespace:QuickerPlaces.Models"
         mc:Ignorable="d"
         Title="{Binding AppName}"
-        Height="650" Width="1000"
-        MinHeight="200" MinWidth="700"
+        Width="1000"
+        MinWidth="700"
         WindowStartupLocation="CenterScreen"
         Loaded="Window_Loaded"
         d:DesignHeight="650" d:DesignWidth="1000">
@@ -15,6 +16,80 @@
     <Window.Resources>
         <converters:BoolToGridLengthConverter x:Key="BoolToGridLengthConverter" />
         <converters:CollectionCountToVisibilityConverter x:Key="CollectionCountToVisibilityConverter" />
+
+        <!--
+            Row text style for the places grid: normally just the theme's
+            default TextBlock look, but a favourited place's row gets a
+            slightly brighter, semibold treatment instead of the old
+            checkbox column — see the Favourite column's replacement below
+            for why the checkbox went away. Applied via each
+            DataGridTextColumn's ElementStyle (and directly on the Type
+            column's own TextBlock) rather than the DataGridRow's
+            Foreground, because DataGridCell's own style already sets an
+            explicit Foreground per cell — a row-level Setter would never
+            win against that, so the accent has to be applied at the same
+            TextBlock level the cell style targets.
+        -->
+        <Style x:Key="PlaceRowText" TargetType="TextBlock" BasedOn="{StaticResource {x:Type TextBlock}}">
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding IsFavourite}" Value="True">
+                    <Setter Property="Foreground" Value="{StaticResource Accent.Hover}" />
+                    <Setter Property="FontWeight" Value="SemiBold" />
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+
+        <!--
+            Small Folder / URL glyph, drawn from plain Path/Ellipse
+            primitives rather than an icon font — the app ships zero
+            external assets (see Theme.xaml's font comment), and a missing
+            or mismatched glyph in a font like Segoe MDL2 Assets would be a
+            much more visible failure than a slightly plain vector shape.
+            Both glyphs are always present in the visual tree; only one is
+            ever Visible, toggled by comparing the bound PlaceViewModel's
+            Type against the enum values via x:Static. Reused for both the
+            grid's Type column and the favourite bubbles. Folder and URL
+            use two different (but close) accent tints, per request, rather
+            than one shared icon color.
+        -->
+        <DataTemplate x:Key="TypeIconTemplate">
+            <Grid Width="14" Height="12" VerticalAlignment="Center">
+                <Path Data="M1,2 L5,2 L6,3.5 L13,3.5 L13,10 L1,10 Z"
+                      Width="14" Height="12" Stretch="Uniform">
+                    <Path.Style>
+                        <Style TargetType="Path">
+                            <Setter Property="Fill" Value="{StaticResource Text.Secondary}" />
+                            <Setter Property="Visibility" Value="Collapsed" />
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding Type}" Value="{x:Static models:PlaceType.Folder}">
+                                    <Setter Property="Visibility" Value="Visible" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </Path.Style>
+                </Path>
+
+                <Grid>
+                    <Grid.Style>
+                        <Style TargetType="Grid">
+                            <Setter Property="Visibility" Value="Collapsed" />
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding Type}" Value="{x:Static models:PlaceType.Url}">
+                                    <Setter Property="Visibility" Value="Visible" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </Grid.Style>
+                    <!-- Two overlapping ring outlines, standing in for a chain-link/URL glyph. -->
+                    <Ellipse Width="8" Height="8" StrokeThickness="1.4"
+                             Stroke="{StaticResource Accent.Hover}"
+                             HorizontalAlignment="Left" VerticalAlignment="Center" />
+                    <Ellipse Width="8" Height="8" StrokeThickness="1.4"
+                             Stroke="{StaticResource Accent.Hover}"
+                             HorizontalAlignment="Right" VerticalAlignment="Center" />
+                </Grid>
+            </Grid>
+        </DataTemplate>
 
         <!--
             Shared per-row/per-bubble context menu content. A ContextMenu is
@@ -73,11 +148,19 @@
                 that (it resolves by name in the XAML namescope, then reads
                 *that* element's DataContext explicitly), which is the
                 standard, reliable way to data-bind a RowDefinition.
+
+                This Star/zero split only decides how space is divided
+                *inside* a given window height. The window's own height —
+                whether it hugs just the header + favourites, or allows
+                room for this row at all — is handled separately in
+                MainWindow.xaml.cs (see ApplyGridExpandedState), since a
+                Star row inside a window that's sizing itself to content
+                would otherwise try to grow to fit every place in the list.
             -->
             <RowDefinition Height="{Binding DataContext.IsGridExpanded, ElementName=RootGrid, Converter={StaticResource BoolToGridLengthConverter}}" />
         </Grid.RowDefinitions>
 
-        <!-- Header: monogram glyph, app name + subheader, add/export/import action row -->
+        <!-- Header: monogram glyph, app name + subheader, view/action row -->
         <Grid Grid.Row="0" Margin="0,0,0,16">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="Auto" />
@@ -98,10 +181,32 @@
             </StackPanel>
 
             <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                <!--
+                    Grid show/hide now lives in the header (rather than its
+                    own row above the grid) so it's reachable no matter
+                    whether the grid is currently showing. Toggling it also
+                    resizes the window itself — see
+                    MainWindow.xaml.cs/ApplyGridExpandedState — collapsing
+                    down to just this header + favourites, or restoring a
+                    fixed height with room for the grid, instead of the old
+                    behaviour of just leaving blank space below.
+                -->
+                <Button Margin="0,0,20,0" Command="{Binding ToggleGridCommand}">
+                    <Button.Style>
+                        <Style TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+                            <Setter Property="Content" Value="Hide List" />
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding IsGridExpanded}" Value="False">
+                                    <Setter Property="Content" Value="Show List" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </Button.Style>
+                </Button>
                 <Button Content="Import..." Command="{Binding ImportCommand}" Margin="0,0,8,0" />
                 <Button Content="Export..." Command="{Binding ExportCommand}" Margin="0,0,16,0" />
                 <Button Content="Add Folder" Command="{Binding AddFolderCommand}" Margin="0,0,8,0" />
-                <Button Content="Add URL" Command="{Binding AddUrlCommand}" Style="{StaticResource Button.Primary}" />
+                <Button Content="Add URL" Command="{Binding AddUrlCommand}" />
             </StackPanel>
         </Grid>
 
@@ -111,7 +216,8 @@
             opens the place, matching a grid row's double-click. Drag to
             reorder is handled in code-behind (Bubble_PreviewMouseMove
             starts the drag; FavouritesPanel_Drop computes the new index
-            and calls MainViewModel.MoveFavourite).
+            and calls MainViewModel.MoveFavourite). Each bubble's label is
+            prefixed with the same Folder/URL glyph used in the grid.
         -->
         <Grid Grid.Row="1" Margin="0,0,0,12">
             <TextBlock Text="Right-click a place below and choose &quot;Toggle Favourite&quot; to pin it here."
@@ -127,40 +233,41 @@
                 </ItemsControl.ItemsPanel>
                 <ItemsControl.ItemTemplate>
                     <DataTemplate>
-                        <Button Content="{Binding Alias}"
-                                Style="{StaticResource Button.Bubble}"
+                        <Button Style="{StaticResource Button.Bubble}"
                                 Tag="{Binding RelativeSource={RelativeSource AncestorType=ItemsControl}, Path=DataContext}"
                                 ContextMenu="{StaticResource BubbleContextMenu}"
                                 Command="{Binding RelativeSource={RelativeSource AncestorType=ItemsControl}, Path=DataContext.OpenCommand}"
                                 CommandParameter="{Binding}"
                                 PreviewMouseLeftButtonDown="Bubble_PreviewMouseLeftButtonDown"
-                                PreviewMouseMove="Bubble_PreviewMouseMove" />
+                                PreviewMouseMove="Bubble_PreviewMouseMove">
+                            <StackPanel Orientation="Horizontal">
+                                <ContentControl Content="{Binding}" ContentTemplate="{StaticResource TypeIconTemplate}"
+                                                Focusable="False" Margin="0,0,6,0" />
+                                <TextBlock Text="{Binding Alias}" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </Button>
                     </DataTemplate>
                 </ItemsControl.ItemTemplate>
             </ItemsControl>
         </Grid>
 
-        <!-- Grid collapse toggle -->
+        <!--
+            "All Places" section label. Collapses along with the grid below
+            it (rather than sitting there on its own) so hiding the list
+            doesn't leave an orphaned heading — see ApplyGridExpandedState
+            in MainWindow.xaml.cs for the matching window-height change.
+        -->
         <Grid Grid.Row="2" Margin="0,0,0,8">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="*" />
-                <ColumnDefinition Width="Auto" />
-            </Grid.ColumnDefinitions>
-
-            <TextBlock Grid.Column="0" Text="All Places" FontSize="14" FontWeight="SemiBold" VerticalAlignment="Center" />
-
-            <Button Grid.Column="1" Command="{Binding ToggleGridCommand}">
-                <Button.Style>
-                    <Style TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
-                        <Setter Property="Content" Value="Hide List" />
-                        <Style.Triggers>
-                            <DataTrigger Binding="{Binding IsGridExpanded}" Value="False">
-                                <Setter Property="Content" Value="Show List" />
-                            </DataTrigger>
-                        </Style.Triggers>
-                    </Style>
-                </Button.Style>
-            </Button>
+            <Grid.Style>
+                <Style TargetType="Grid">
+                    <Style.Triggers>
+                        <DataTrigger Binding="{Binding IsGridExpanded}" Value="False">
+                            <Setter Property="Visibility" Value="Collapsed" />
+                        </DataTrigger>
+                    </Style.Triggers>
+                </Style>
+            </Grid.Style>
+            <TextBlock Text="All Places" FontSize="14" FontWeight="SemiBold" VerticalAlignment="Center" />
         </Grid>
 
         <!--
@@ -182,27 +289,30 @@
                 </Style>
             </DataGrid.RowStyle>
             <DataGrid.Columns>
-                <DataGridTextColumn Header="Alias" Binding="{Binding Alias}" Width="*" />
-                <DataGridTextColumn Header="Type" Binding="{Binding TypeLabel}" Width="90" />
-                <DataGridTextColumn Header="Path / URL" Binding="{Binding Resource}" Width="2*" />
+                <DataGridTextColumn Header="Alias" Binding="{Binding Alias}" Width="*" ElementStyle="{StaticResource PlaceRowText}" />
+
+                <!-- Folder/URL glyph ahead of the label, instead of plain text alone. -->
+                <DataGridTemplateColumn Header="Type" Width="90">
+                    <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate>
+                            <StackPanel Orientation="Horizontal">
+                                <ContentControl Content="{Binding}" ContentTemplate="{StaticResource TypeIconTemplate}"
+                                                Focusable="False" Margin="0,0,6,0" />
+                                <TextBlock Text="{Binding TypeLabel}" Style="{StaticResource PlaceRowText}" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+
+                <DataGridTextColumn Header="Path / URL" Binding="{Binding Resource}" Width="2*" ElementStyle="{StaticResource PlaceRowText}" />
+
                 <!--
-                    Mode=OneWay is required here, not just decorative:
-                    DataGridCheckBoxColumn's cell (display AND edit) is a
-                    live CheckBox bound via IsChecked, which defaults to
-                    TwoWay in its own property metadata — the column's
-                    IsReadOnly only stops the user from clicking into edit
-                    mode, it doesn't change the binding WPF actually builds.
-                    Text columns don't hit this because their read-only
-                    display element is a plain TextBlock (OneWay by
-                    default); only the editable TextBox — never
-                    instantiated while IsReadOnly — would default TwoWay.
-                    Without an explicit Mode here, binding IsFavourite
-                    (get-only on PlaceViewModel) throws
-                    InvalidOperationException as soon as the column tries
-                    to bind.
+                    The old Favourite checkbox column is gone — a favourited
+                    row is now shown by accenting its own text (PlaceRowText
+                    above, applied to every column's TextBlock) rather than
+                    a separate tick box.
                 -->
-                <DataGridCheckBoxColumn Header="Favourite" Binding="{Binding IsFavourite, Mode=OneWay}" Width="90" IsReadOnly="True" />
-                <DataGridTextColumn Header="Date Added" Binding="{Binding DateAdded, StringFormat={}{0:d}}" Width="110" />
+                <DataGridTextColumn Header="Date Added" Binding="{Binding DateAdded, StringFormat={}{0:d}}" Width="110" ElementStyle="{StaticResource PlaceRowText}" />
             </DataGrid.Columns>
         </DataGrid>
     </Grid>
